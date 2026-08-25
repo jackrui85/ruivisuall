@@ -45,8 +45,9 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         try {
           const response = await invokeLLM({
-            model: "gemini-3-flash-preview",
-            maxTokens: 500,
+            model: "gpt-5-mini",
+            maxCompletionTokens: 700,
+            reasoning: { effort: "minimal" },
             messages: [
               {
                 role: "system",
@@ -60,10 +61,12 @@ export const appRouter = router({
                 ],
               },
             ],
-            response_format: { type: "json_object" },
           });
-          const content = response.choices[0]?.message.content;
-          return safeEnvironmentResult(typeof content === "string" ? content : "");
+          const content = response.choices?.[0]?.message?.content;
+          if (typeof content !== "string" || !content.trim()) {
+            throw new Error("AI 服務未回傳可用的影像描述，請重新拍攝後再試一次。");
+          }
+          return safeEnvironmentResult(content);
         } catch (error) {
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? `影像辨識暫時無法完成：${error.message}` : "影像辨識暫時無法完成。" });
         }
@@ -77,7 +80,8 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const response = await transcribeAudio({
-          audioUrl: `data:${input.mimeType};base64,${input.audioBase64}`,
+          audioBase64: input.audioBase64,
+          mimeType: input.mimeType,
           language: "zh",
           prompt: "請以繁體中文忠實轉錄使用者的語音指令或記事內容。",
         });

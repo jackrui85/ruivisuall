@@ -62,7 +62,7 @@ export default function NotesScreen() {
         <View accessible accessibilityLabel={`錄音狀態：${voice.error || (voice.isRecording ? "正在錄音" : "尚未錄音")}`} style={styles.statusCard}>
           <Text style={styles.statusText}>{voice.error || (voice.isRecording ? "正在錄音。完成後按停止並儲存。" : "按下開始錄音，說完後再按一次。")}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={voice.isRecording ? "停止錄音並儲存記事" : "開始錄製語音記事"} onPress={voice.isRecording ? voice.stop : voice.start} disabled={voice.isProcessing} style={({ pressed }) => [styles.recordButton, (pressed || voice.isProcessing) && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={voice.isRecording ? "停止錄音並儲存記事" : "開始錄製語音記事"} onPress={voice.isRecording ? voice.stop : voice.start} disabled={voice.isBusy && !voice.isRecording} style={({ pressed }) => [styles.recordButton, (pressed || voice.isBusy) && styles.pressed]}>
           {voice.isProcessing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.recordText}>{voice.isRecording ? "停止錄音並儲存" : "開始錄音"}</Text>}
         </Pressable>
         {loading ? <ActivityIndicator color="#153D73" style={styles.loader} /> : (

@@ -28,7 +28,9 @@
 import { ENV } from "./env";
 
 export type TranscribeOptions = {
-  audioUrl: string; // URL to the audio file (e.g., S3 URL)
+  audioUrl?: string; // URL to the audio file (e.g., S3 URL)
+  audioBase64?: string; // Native capture payload when temporary upload is unnecessary
+  mimeType?: string;
   language?: string; // Optional: specify language code (e.g., "en", "es", "zh")
   prompt?: string; // Optional: custom prompt for the transcription
 };
@@ -95,21 +97,31 @@ export async function transcribeAudio(
       };
     }
 
-    // Step 2: Download audio from URL
+    // Step 2: Load audio from a trusted storage URL or from a validated native capture payload.
     let audioBuffer: Buffer;
     let mimeType: string;
     try {
-      const response = await fetch(options.audioUrl);
-      if (!response.ok) {
+      if (options.audioBase64) {
+        audioBuffer = Buffer.from(options.audioBase64, "base64");
+        mimeType = options.mimeType || "audio/mp4";
+      } else if (options.audioUrl) {
+        const response = await fetch(options.audioUrl);
+        if (!response.ok) {
+          return {
+            error: "Failed to download audio file",
+            code: "INVALID_FORMAT",
+            details: `HTTP ${response.status}: ${response.statusText}`,
+          };
+        }
+        audioBuffer = Buffer.from(await response.arrayBuffer());
+        mimeType = options.mimeType || response.headers.get("content-type") || "audio/mpeg";
+      } else {
         return {
-          error: "Failed to download audio file",
+          error: "No audio data was provided",
           code: "INVALID_FORMAT",
-          details: `HTTP ${response.status}: ${response.statusText}`,
+          details: "Provide audioUrl or audioBase64.",
         };
       }
-
-      audioBuffer = Buffer.from(await response.arrayBuffer());
-      mimeType = response.headers.get("content-type") || "audio/mpeg";
 
       // Check file size (16MB limit)
       const sizeMB = audioBuffer.length / (1024 * 1024);
@@ -118,6 +130,13 @@ export async function transcribeAudio(
           error: "Audio file exceeds maximum size limit",
           code: "FILE_TOO_LARGE",
           details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`,
+        };
+      }
+      if (audioBuffer.length === 0) {
+        return {
+          error: "Recorded audio is empty",
+          code: "INVALID_FORMAT",
+          details: "Record for at least one second before stopping.",
         };
       }
     } catch (error) {

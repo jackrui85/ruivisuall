@@ -49,7 +49,7 @@ export default function HomeScreen() {
           <Text style={styles.statusLabel}>語音狀態</Text>
           <Text style={styles.statusText}>{voice.error || status}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={voice.isRecording ? "停止語音指令並開始理解" : "開始語音指令"} accessibilityHint="可說辨識環境、我在哪裡、現在時間、建立記事或搜尋網站" onPress={voice.isRecording ? voice.stop : voice.start} disabled={voice.isProcessing} style={({ pressed }) => [styles.voiceControl, (pressed || voice.isProcessing) && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={voice.isRecording ? "停止語音指令並開始理解" : "開始語音指令"} accessibilityHint="可說辨識環境、我在哪裡、現在時間、建立記事或搜尋網站" onPress={voice.isRecording ? voice.stop : voice.start} disabled={voice.isBusy && !voice.isRecording} style={({ pressed }) => [styles.voiceControl, (pressed || voice.isBusy) && styles.pressed]}>
           {voice.isProcessing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.voiceControlText}>{voice.isRecording ? "停止錄音並理解" : "開始語音指令"}</Text>}
         </Pressable>
         <View style={styles.actions}>

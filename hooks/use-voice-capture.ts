@@ -6,7 +6,6 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
-import { Platform } from "react-native";
 import { useCallback, useEffect, useState } from "react";
 
 import { trpc } from "@/lib/trpc";
@@ -21,6 +20,8 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
   const recorderState = useAudioRecorderState(audioRecorder);
   const [error, setError] = useState<string | null>(null);
   const [audioUri, setAudioUri] = useState<string | undefined>();
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const transcribe = trpc.voice.transcribe.useMutation();
 
   useEffect(() => {
@@ -29,25 +30,25 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
 
   const start = useCallback(async () => {
     setError(null);
-    if (Platform.OS === "web") {
-      setError("語音錄製請在 Android 裝置上使用。");
-      return;
-    }
-    const permission = await requestRecordingPermissionsAsync();
-    if (!permission.granted) {
-      setError("尚未取得麥克風權限。請在系統設定中允許後再試一次。");
-      return;
-    }
+    setIsPreparing(true);
     try {
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error("尚未取得麥克風權限。請在系統設定中允許後再試一次。");
+      }
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
-    } catch {
-      setError("無法開始錄音，請確認麥克風未被其他應用程式使用。");
+    } catch (captureError) {
+      setError(captureError instanceof Error ? captureError.message : "無法開始錄音，請確認麥克風未被其他應用程式使用。");
+    } finally {
+      setIsPreparing(false);
     }
   }, [audioRecorder]);
 
   const stop = useCallback(async () => {
     setError(null);
+    setIsFinalizing(true);
     try {
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
@@ -62,20 +63,23 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
       if (persisted) source.copy(persisted);
       const response = await transcribe.mutateAsync({
         audioBase64: await source.base64(),
-        mimeType: Platform.OS === "android" ? "audio/mp4" : "audio/m4a",
+        mimeType: "audio/mp4",
       });
       const savedUri = persisted?.uri;
       setAudioUri(savedUri);
       await options.onTranscript?.(response.text, savedUri);
     } catch (captureError) {
       setError(captureError instanceof Error ? captureError.message : "語音轉錄失敗，請再試一次。");
+    } finally {
+      setIsFinalizing(false);
     }
   }, [audioRecorder, options, transcribe]);
 
   return {
     audioUri,
     error,
-    isProcessing: transcribe.isPending,
+    isBusy: isPreparing || isFinalizing || transcribe.isPending,
+    isProcessing: isFinalizing || transcribe.isPending,
     isRecording: recorderState.isRecording,
     start,
     stop,

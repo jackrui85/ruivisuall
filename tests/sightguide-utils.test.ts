@@ -24,6 +24,7 @@ describe("視界助行語音指令", () => {
 
   it("把瀏覽器語音轉為含搜尋字詞的命令", () => {
     expect(parseVoiceCommand("搜尋公車即時動態")).toEqual({ type: "browse", query: "公車即時動態" });
+    expect(parseVoiceCommand("開啟台灣銀行")).toEqual({ type: "browse", query: "台灣銀行" });
   });
 });
 

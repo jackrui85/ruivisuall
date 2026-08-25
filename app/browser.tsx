@@ -12,28 +12,29 @@ export default function BrowserScreen() {
   const [query, setQuery] = useState(params.initialQuery ?? "");
   const [status, setStatus] = useState("說出想搜尋的內容，或輸入網站網址。");
 
-  const handleTranscript = useCallback(async (text: string) => {
-    const command = parseVoiceCommand(text);
-    const nextQuery = command.type === "browse" ? command.query || text : text;
-    setQuery(nextQuery);
-    const message = `已聽到：${nextQuery}。請按開啟網站確認。`;
-    setStatus(message);
-    await speakText(message);
-  }, []);
-  const voice = useVoiceCapture({ onTranscript: handleTranscript });
-
-  const openBrowser = async () => {
-    const target = createBrowserUrl(query);
+  const openBrowser = useCallback(async (rawQuery = query) => {
+    const target = createBrowserUrl(rawQuery);
     try {
       setStatus(`準備開啟：${target}`);
-      await speakText("正在開啟系統瀏覽器。網站內的操作需要由你自行確認。 ");
+      await speakText("正在開啟系統瀏覽器。網站內的操作需要由你自行確認。");
       await WebBrowser.openBrowserAsync(target, { toolbarColor: "#153D73", controlsColor: "#FFFFFF", showTitle: true });
     } catch {
       const message = "無法開啟系統瀏覽器，請確認裝置是否有可用的瀏覽器。";
       setStatus(message);
       await speakText(message);
     }
-  };
+  }, [query]);
+
+  const handleTranscript = useCallback(async (text: string) => {
+    const command = parseVoiceCommand(text);
+    const nextQuery = command.type === "browse" ? command.query || text : text;
+    setQuery(nextQuery);
+    const message = `已聽到：${nextQuery}。正在開啟系統瀏覽器。`;
+    setStatus(message);
+    await speakText(message);
+    await openBrowser(nextQuery);
+  }, [openBrowser]);
+  const voice = useVoiceCapture({ onTranscript: handleTranscript });
 
   return (
     <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]}>
@@ -49,16 +50,16 @@ export default function BrowserScreen() {
           placeholderTextColor="#64748B"
           autoCapitalize="none"
           returnKeyType="go"
-          onSubmitEditing={openBrowser}
+          onSubmitEditing={() => void openBrowser()}
           style={styles.input}
         />
         <View accessible accessibilityLabel={`語音瀏覽器狀態：${voice.error || status}`} style={styles.statusCard}>
           <Text style={styles.statusText}>{voice.error || status}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={voice.isRecording ? "停止錄音並辨識語音指令" : "開始語音指令"} onPress={voice.isRecording ? voice.stop : voice.start} disabled={voice.isProcessing} style={({ pressed }) => [styles.voiceButton, (pressed || voice.isProcessing) && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={voice.isRecording ? "停止錄音並辨識語音指令" : "開始語音指令"} onPress={voice.isRecording ? voice.stop : voice.start} disabled={voice.isBusy && !voice.isRecording} style={({ pressed }) => [styles.voiceButton, (pressed || voice.isBusy) && styles.pressed]}>
           {voice.isProcessing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{voice.isRecording ? "停止錄音並辨識" : "開始語音指令"}</Text>}
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="開啟系統瀏覽器" accessibilityHint="以目前輸入內容搜尋或開啟網址" onPress={openBrowser} style={({ pressed }) => [styles.openButton, pressed && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="開啟系統瀏覽器" accessibilityHint="以目前輸入內容搜尋或開啟網址" onPress={() => void openBrowser()} style={({ pressed }) => [styles.openButton, pressed && styles.pressed]}>
           <Text style={styles.buttonText}>開啟網站</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="停止語音並返回首頁" onPress={() => { void stopSpeaking(); router.back(); }} style={styles.backButton}>
