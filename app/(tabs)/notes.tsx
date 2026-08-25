@@ -1,4 +1,4 @@
-import { File } from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { createAudioPlayer } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
@@ -37,7 +37,7 @@ export default function NotesScreen() {
     setNotes(next);
     await saveNotes(next);
     if (note.audioUri) {
-      try { new File(note.audioUri).delete(); } catch { /* The textual note remains deleted even if the cached audio is unavailable. */ }
+      try { await FileSystem.deleteAsync(note.audioUri, { idempotent: true }); } catch { /* The textual note remains deleted even if the cached audio is unavailable. */ }
     }
     await speakText("已刪除記事。");
   };

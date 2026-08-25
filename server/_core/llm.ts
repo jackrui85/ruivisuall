@@ -290,7 +290,8 @@ const fetchWithBackoff = async (url: string, init: FetchInit): Promise<Response>
   for (let attempt = 0; attempt <= RETRY_MAX_RETRIES; attempt++) {
     try {
       const response = await fetch(url, init);
-      if (response.ok || attempt === RETRY_MAX_RETRIES) {
+      const shouldRetry = response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500;
+      if (response.ok || !shouldRetry || attempt === RETRY_MAX_RETRIES) {
         return response;
       }
 

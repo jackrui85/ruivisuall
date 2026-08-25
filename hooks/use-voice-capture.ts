@@ -1,4 +1,4 @@
-import { File, Paths } from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -53,21 +53,23 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
       if (!uri) throw new Error("找不到錄音檔案");
-      const source = new File(uri);
-      if (source.size > 16 * 1024 * 1024) {
+      const info = await FileSystem.getInfoAsync(uri);
+      if (!info.exists) throw new Error("找不到錄音檔案");
+      if ((info.size ?? 0) > 16 * 1024 * 1024) {
         throw new Error("錄音檔過大，請將記事內容縮短後再試一次。");
       }
-      const persisted = options.persistAudio
-        ? new File(Paths.document, `sightguide-note-${Date.now()}.m4a`)
+      const documents = FileSystem.documentDirectory;
+      const persistedUri = options.persistAudio && documents
+        ? `${documents}sightguide-note-${Date.now()}.m4a`
         : undefined;
-      if (persisted) source.copy(persisted);
+      if (persistedUri) await FileSystem.copyAsync({ from: uri, to: persistedUri });
+      const audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       const response = await transcribe.mutateAsync({
-        audioBase64: await source.base64(),
+        audioBase64,
         mimeType: "audio/mp4",
       });
-      const savedUri = persisted?.uri;
-      setAudioUri(savedUri);
-      await options.onTranscript?.(response.text, savedUri);
+      setAudioUri(persistedUri);
+      await options.onTranscript?.(response.text, persistedUri);
     } catch (captureError) {
       setError(captureError instanceof Error ? captureError.message : "語音轉錄失敗，請再試一次。");
     } finally {

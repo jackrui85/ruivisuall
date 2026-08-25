@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as ImageManipulator from "expo-image-manipulator";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
@@ -34,12 +35,20 @@ export default function CameraScreen() {
         await speakText("正在辨識目前畫面，請稍候。");
       }
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.35,
+        base64: false,
+        quality: 0.55,
         skipProcessing: false,
       });
-      if (!photo.base64) throw new Error("相機未能取得可辨識的影像。");
-      const data = await analyze.mutateAsync({ imageData: `data:image/jpeg;base64,${photo.base64}` });
+      const prepared = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 1024 } }],
+        { base64: true, compress: 0.35, format: ImageManipulator.SaveFormat.JPEG },
+      );
+      if (!prepared.base64) throw new Error("相機未能取得可辨識的影像。");
+      if (prepared.base64.length > 1_800_000) {
+        throw new Error("影像資料過大，請將鏡頭對準主要目標後再試一次。");
+      }
+      const data = await analyze.mutateAsync({ imageData: `data:image/jpeg;base64,${prepared.base64}` });
       const spoken = data.caution ? `請注意，${data.caution}。${data.summary}` : data.summary;
       setResult(spoken);
       if (!live || spoken !== lastLiveMessage.current) {
