@@ -19,3 +19,6 @@
 - [x] 修正 Azure Responses 端點的影像辨識請求 400 錯誤
 - [x] 修正語音記事 this.validatePath 檔案路徑相容性錯誤
 - [x] 驗證修正後的影像辨識與語音記事實機流程
+- [x] 修正 Web 預覽誤呼叫 expo-file-system 原生 API 的錯誤
+- [x] 確保 Android 語音記事轉錄後可保存文字內容
+- [ ] 驗證 Web 降級訊息與 Android 語音記事流程
