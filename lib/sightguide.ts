@@ -1,0 +1,120 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Speech from "expo-speech";
+
+export type SightGuideNote = {
+  id: string;
+  text: string;
+  createdAt: string;
+  audioUri?: string;
+};
+
+export type AccessibilityPreferences = {
+  speechRate: number;
+  detailLevel: "brief" | "standard";
+  autoReadResults: boolean;
+};
+
+export type VoiceCommand =
+  | { type: "recognize" }
+  | { type: "location" }
+  | { type: "time" }
+  | { type: "note" }
+  | { type: "browse"; query?: string }
+  | { type: "unknown"; raw: string };
+
+const NOTES_KEY = "sightguide.notes.v1";
+const SETTINGS_KEY = "sightguide.preferences.v1";
+
+export const defaultPreferences: AccessibilityPreferences = {
+  speechRate: 0.9,
+  detailLevel: "standard",
+  autoReadResults: true,
+};
+
+export async function getPreferences(): Promise<AccessibilityPreferences> {
+  try {
+    const raw = await AsyncStorage.getItem(SETTINGS_KEY);
+    if (!raw) return defaultPreferences;
+    return { ...defaultPreferences, ...(JSON.parse(raw) as Partial<AccessibilityPreferences>) };
+  } catch {
+    return defaultPreferences;
+  }
+}
+
+export async function savePreferences(preferences: AccessibilityPreferences) {
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(preferences));
+}
+
+export async function speakText(text: string, rate?: number) {
+  const preferences = await getPreferences();
+  await Speech.stop();
+  Speech.speak(text, {
+    language: "zh-TW",
+    rate: rate ?? preferences.speechRate,
+    pitch: 1,
+  });
+}
+
+export async function stopSpeaking() {
+  await Speech.stop();
+}
+
+export async function getNotes(): Promise<SightGuideNote[]> {
+  try {
+    const raw = await AsyncStorage.getItem(NOTES_KEY);
+    return raw ? (JSON.parse(raw) as SightGuideNote[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveNotes(notes: SightGuideNote[]) {
+  await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
+export function formatReadableTime(date = new Date()) {
+  const dateText = new Intl.DateTimeFormat("zh-TW", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(date);
+  const timeText = new Intl.DateTimeFormat("zh-TW", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+  return `現在是${dateText}，${timeText}`;
+}
+
+export function parseVoiceCommand(raw: string): VoiceCommand {
+  const normalized = raw.trim().replace(/\s+/g, "").toLowerCase();
+  if (!normalized) return { type: "unknown", raw };
+  if (/(辨識|看一下|看前方|環境|相機)/.test(normalized)) return { type: "recognize" };
+  if (/(在哪裡|位置|定位|方位)/.test(normalized)) return { type: "location" };
+  if (/(幾點|時間|日期)/.test(normalized)) return { type: "time" };
+  if (/(記事|筆記|記下|備忘)/.test(normalized)) return { type: "note" };
+  if (/(瀏覽器|開啟|搜尋|查詢|上網)/.test(normalized)) {
+    const query = raw
+      .replace(/(請幫我|幫我|我要|請|用)?(開啟|搜尋|查詢|瀏覽|上網|瀏覽器)/g, "")
+      .trim();
+    return { type: "browse", query: query || undefined };
+  }
+  return { type: "unknown", raw };
+}
+
+export function createBrowserUrl(raw: string) {
+  const text = raw.trim();
+  if (!text) return "https://www.google.com";
+  const hasProtocol = /^https?:\/\//i.test(text);
+  const looksLikeDomain = /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:\/[^\s]*)?$/i.test(text);
+  if (hasProtocol || looksLikeDomain) {
+    try {
+      const url = new URL(hasProtocol ? text : `https://${text}`);
+      if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
+    } catch {
+      // The text is a malformed domain, handled as a search query below.
+    }
+  }
+  return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
+}

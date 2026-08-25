@@ -32,7 +32,7 @@ const env = {
   appSlug: "sightguide-ai",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "",
+  logoUrl: "/manus-storage/sightguide-ai-icon_1373e401.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -64,7 +64,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
-    permissions: ["POST_NOTIFICATIONS"],
+    permissions: ["POST_NOTIFICATIONS", "CAMERA", "RECORD_AUDIO", "ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"],
     intentFilters: [
       {
         action: "VIEW",
@@ -90,6 +90,25 @@ const config: ExpoConfig = {
       "expo-audio",
       {
         microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
+      },
+    ],
+    [
+      "expo-camera",
+      {
+        cameraPermission: "允許 $(PRODUCT_NAME) 使用相機以描述目前畫面。",
+        microphonePermission: "允許 $(PRODUCT_NAME) 使用麥克風以建立語音記事與語音指令。",
+      },
+    ],
+    [
+      "expo-location",
+      {
+        locationWhenInUsePermission: "允許 $(PRODUCT_NAME) 在使用期間取得位置，以報讀目前位置。",
+      },
+    ],
+    [
+      "expo-web-browser",
+      {
+        experimentalLauncherActivity: true,
       },
     ],
     [

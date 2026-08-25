@@ -15,6 +15,14 @@ type IconSymbolName = keyof typeof MAPPING;
  */
 const MAPPING = {
   "house.fill": "home",
+  "camera.fill": "camera-alt",
+  "note.text": "sticky-note-2",
+  "gearshape.fill": "settings",
+  "location.fill": "my-location",
+  "clock.fill": "schedule",
+  "safari.fill": "language",
+  "speaker.wave.2.fill": "volume-up",
+  "xmark.circle.fill": "cancel",
   "paperplane.fill": "send",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
