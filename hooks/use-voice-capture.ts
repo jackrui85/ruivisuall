@@ -7,7 +7,7 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import { Platform } from "react-native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { trpc } from "@/lib/trpc";
 
@@ -28,6 +28,9 @@ const VOICE_NOTE_RECORDING_PRESET = {
 
 function readableRecordingError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
+  if (/already been prepared|prepareToRecordAsync/i.test(message)) {
+    return "錄音器正在準備中，請稍候再開始。若持續出現此訊息，請先停止目前錄音後再試一次。";
+  }
   if (/AudioRecorder\.record|start failed|MediaRecorder/i.test(message)) {
     return "無法啟動麥克風。請確認系統已允許麥克風、關閉其他正在錄音的應用程式，並在模擬器設定中啟用麥克風後再試一次。";
   }
@@ -56,13 +59,25 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
   const [audioUri, setAudioUri] = useState<string | undefined>();
   const [isPreparing, setIsPreparing] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const startingRef = useRef(false);
   const transcribe = trpc.voice.transcribe.useMutation();
 
   useEffect(() => {
     if (Platform.OS !== "web") void setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
   }, []);
 
+  useEffect(() => () => {
+    try {
+      const status = audioRecorder.getStatus();
+      if (status.canRecord || status.isRecording) void audioRecorder.stop();
+    } catch {
+      // The recorder may already have been released by the operating system.
+    }
+  }, [audioRecorder]);
+
   const start = useCallback(async () => {
+    if (startingRef.current || audioRecorder.isRecording) return;
+    startingRef.current = true;
     setError(null);
     setIsPreparing(true);
     try {
@@ -72,11 +87,20 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
         throw new Error("尚未取得麥克風權限。請在系統設定中允許後再試一次。");
       }
       if (Platform.OS !== "web") await new Promise((resolve) => setTimeout(resolve, 120));
-      await audioRecorder.prepareToRecordAsync();
+      const status = audioRecorder.getStatus();
+      if (!status.canRecord) {
+        try {
+          await audioRecorder.prepareToRecordAsync();
+        } catch (prepareError) {
+          const recoveredStatus = audioRecorder.getStatus();
+          if (!recoveredStatus.canRecord) throw prepareError;
+        }
+      }
       audioRecorder.record();
     } catch (captureError) {
       setError(readableRecordingError(captureError));
     } finally {
+      startingRef.current = false;
       setIsPreparing(false);
     }
   }, [audioRecorder]);
