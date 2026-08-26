@@ -78,6 +78,12 @@ export async function saveNotes(notes: SightGuideNote[]) {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
 }
 
+export function buildEnvironmentNoteText(summary: string, caution?: string) {
+  const safeSummary = summary.trim();
+  const safeCaution = caution?.trim();
+  return `環境辨識結果：${safeCaution ? `請注意，${safeCaution}。` : ""}${safeSummary}`;
+}
+
 export type NoteSearchCriteria = {
   category?: NoteCategory;
   keyword?: string;

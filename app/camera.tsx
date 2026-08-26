@@ -4,19 +4,23 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { speakText, stopSpeaking } from "@/lib/sightguide";
+import { buildEnvironmentNoteText, getNotes, saveNotes, SightGuideNote, speakText, stopSpeaking } from "@/lib/sightguide";
 import { trpc } from "@/lib/trpc";
 
 export default function CameraScreen() {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [result, setResult] = useState<string>("鏡頭準備中。請將手機後鏡頭朝向想要辨識的方向。");
+  const [facing, setFacing] = useState<"back" | "front">("back");
+  const [environmentNoteText, setEnvironmentNoteText] = useState<string | null>(null);
+  const [isSavingNote, setIsSavingNote] = useState(false);
   const [liveEnabled, setLiveEnabled] = useState(false);
   const liveEnabledRef = useRef(false);
   const liveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCapturing = useRef(false);
   const lastLiveMessage = useRef("");
   const analyze = trpc.vision.analyze.useMutation();
+  const organizeNote = trpc.notes.organize.useMutation();
 
   const stopLiveReadout = useCallback(async (announce = true) => {
     liveEnabledRef.current = false;
@@ -51,6 +55,7 @@ export default function CameraScreen() {
       const data = await analyze.mutateAsync({ imageData: `data:image/jpeg;base64,${prepared.base64}` });
       const spoken = data.caution ? `請注意，${data.caution}。${data.summary}` : data.summary;
       setResult(spoken);
+      setEnvironmentNoteText(buildEnvironmentNoteText(data.summary, data.caution));
       if (!live || spoken !== lastLiveMessage.current) {
         lastLiveMessage.current = spoken;
         await speakText(spoken);
@@ -73,6 +78,35 @@ export default function CameraScreen() {
     setLiveEnabled(true);
     await speakText("已開始即時環境朗讀。系統每七秒擷取一張畫面；請持續以可靠方式確認周遭環境。");
     await captureAndDescribe(true);
+  };
+
+  const switchCamera = async () => {
+    const next = facing === "back" ? "front" : "back";
+    setFacing(next);
+    setEnvironmentNoteText(null);
+    setResult(`已切換至${next === "front" ? "前置" : "後置"}鏡頭。`);
+    await speakText(`已切換至${next === "front" ? "前置" : "後置"}鏡頭。`);
+  };
+
+  const saveEnvironmentAsNote = async () => {
+    if (!environmentNoteText || isSavingNote) {
+      await speakText("請先完成一次環境辨識，再將結果儲存為記事。");
+      return;
+    }
+    setIsSavingNote(true);
+    const note: SightGuideNote = { id: `environment-${Date.now()}`, text: environmentNoteText, createdAt: new Date().toISOString() };
+    try {
+      const existing = await getNotes();
+      await saveNotes([note, ...existing]);
+      const organization = await organizeNote.mutateAsync({ text: environmentNoteText });
+      const updatedNotes = [{ ...note, ...organization }, ...existing];
+      await saveNotes(updatedNotes);
+      await speakText(`已成功將環境辨識結果儲存為${organization.category}記事。摘要：${organization.summary}`);
+    } catch {
+      await speakText("已儲存環境辨識結果，但暫時無法自動分類。您可在語音記事中查看內容。");
+    } finally {
+      setIsSavingNote(false);
+    }
   };
 
   useEffect(() => () => { void stopLiveReadout(false); }, [stopLiveReadout]);
@@ -98,7 +132,7 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" onCameraReady={() => void speakText("鏡頭已開啟。按描述目前畫面即可開始辨識。")} />
+      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} onCameraReady={() => void speakText(`${facing === "front" ? "前置" : "後置"}鏡頭已開啟。按描述目前畫面即可開始辨識。`)} />
       <View style={styles.topPanel} accessible accessibilityLabel={`環境辨識狀態：${result}`}>
         <Text style={styles.title}>環境辨識</Text>
         <Text numberOfLines={3} style={styles.status}>{result}</Text>
@@ -114,6 +148,9 @@ export default function CameraScreen() {
         >
           {analyze.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.captureText}>描述目前畫面</Text>}
         </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={isSavingNote ? "正在儲存辨識結果為記事" : "儲存辨識結果為記事"} accessibilityHint="把最近一次環境辨識結果儲存為新的文字記事並自動分類" disabled={!environmentNoteText || isSavingNote} onPress={() => void saveEnvironmentAsNote()} style={({ pressed }) => [styles.saveNoteButton, (pressed || !environmentNoteText || isSavingNote) && styles.pressed]}>
+          {isSavingNote ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveNoteText}>儲存辨識為記事</Text>}
+        </Pressable>
         <View style={styles.secondaryRow}>
           <Pressable accessibilityRole="button" accessibilityLabel="重新報讀辨識結果" onPress={() => void speakText(result)} style={styles.secondaryButton}>
             <Text style={styles.secondaryText}>重播結果</Text>
@@ -122,6 +159,9 @@ export default function CameraScreen() {
             <Text style={styles.stopText}>停止並返回</Text>
           </Pressable>
         </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={`切換至${facing === "back" ? "前置" : "後置"}鏡頭`} accessibilityHint="切換相機鏡頭，切換後會語音告知目前鏡頭" onPress={() => void switchCamera()} style={({ pressed }) => [styles.switchCameraButton, pressed && styles.pressed]}>
+          <Text style={styles.switchCameraText}>切換至{facing === "back" ? "前置" : "後置"}鏡頭</Text>
+        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={liveEnabled ? "停止即時環境朗讀" : "開始即時環境朗讀"} accessibilityHint="開啟後每七秒分析一張畫面並報讀變化；再次點擊即可停止" onPress={() => { if (liveEnabled) void stopLiveReadout(); else void startLiveReadout(); }} style={({ pressed }) => [liveEnabled ? styles.liveStopButton : styles.liveButton, pressed && styles.pressed]}>
           <Text style={styles.liveText}>{liveEnabled ? "停止即時朗讀" : "開始即時朗讀"}</Text>
         </Pressable>
@@ -142,6 +182,8 @@ const styles = StyleSheet.create({
   bottomPanel: { marginTop: "auto", padding: 18, paddingBottom: 34, backgroundColor: "rgba(7,16,29,0.92)", gap: 12 },
   captureButton: { minHeight: 70, backgroundColor: "#00A6A6", borderRadius: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
   captureText: { color: "#FFFFFF", fontWeight: "800", fontSize: 22 },
+  saveNoteButton: { minHeight: 56, backgroundColor: "#153D73", borderRadius: 16, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
+  saveNoteText: { color: "#FFFFFF", fontWeight: "800", fontSize: 18 },
   secondaryRow: { flexDirection: "row", gap: 10 },
   secondaryButton: { flex: 1, minHeight: 54, borderRadius: 14, backgroundColor: "#1E3A5F", justifyContent: "center", alignItems: "center" },
   secondaryText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
@@ -150,6 +192,8 @@ const styles = StyleSheet.create({
   liveButton: { minHeight: 54, borderRadius: 14, backgroundColor: "#0F766E", justifyContent: "center", alignItems: "center" },
   liveStopButton: { minHeight: 54, borderRadius: 14, backgroundColor: "#A61B1B", justifyContent: "center", alignItems: "center" },
   liveText: { color: "#FFFFFF", fontSize: 17, fontWeight: "800" },
+  switchCameraButton: { minHeight: 52, borderRadius: 14, backgroundColor: "#DDF7F4", borderWidth: 1, borderColor: "#0F766E", justifyContent: "center", alignItems: "center" },
+  switchCameraText: { color: "#0F5D59", fontSize: 17, fontWeight: "800" },
   primaryButton: { minHeight: 58, backgroundColor: "#153D73", borderRadius: 16, alignItems: "center", justifyContent: "center" },
   primaryButtonText: { color: "#FFFFFF", fontSize: 19, fontWeight: "800" },
   ghostButton: { minHeight: 54, alignItems: "center", justifyContent: "center" },

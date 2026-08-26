@@ -12,7 +12,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
-import { buildSavedNotesReadout, createBrowserUrl, filterNotesByCriteria, parseNoteSearchCommand, parseVoiceCommand } from "../lib/sightguide";
+import { buildEnvironmentNoteText, buildSavedNotesReadout, createBrowserUrl, filterNotesByCriteria, parseNoteSearchCommand, parseVoiceCommand } from "../lib/sightguide";
 
 describe("視界助行語音指令", () => {
   it("辨識常見的環境、位置、時間與記事指令", () => {
@@ -51,6 +51,12 @@ describe("已儲存記事朗讀內容", () => {
 
   it("沒有記事時會提供明確語音回饋", () => {
     expect(buildSavedNotesReadout([])).toBe("目前沒有已儲存的文字記事。");
+  });
+});
+
+describe("環境辨識記事內容", () => {
+  it("保留辨識摘要與需留意的提示，以便儲存為記事", () => {
+    expect(buildEnvironmentNoteText("前方可見門口", "地面可能有階梯")).toBe("環境辨識結果：請注意，地面可能有階梯。前方可見門口");
   });
 });
 
