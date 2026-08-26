@@ -11,6 +11,29 @@ import { useCallback, useEffect, useState } from "react";
 
 import { trpc } from "@/lib/trpc";
 
+const VOICE_NOTE_RECORDING_PRESET = {
+  ...RecordingPresets.HIGH_QUALITY,
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  bitRate: 64000,
+  android: {
+    ...RecordingPresets.HIGH_QUALITY.android,
+    extension: ".m4a",
+    sampleRate: 16000,
+    outputFormat: "mpeg4" as const,
+    audioEncoder: "aac" as const,
+    audioSource: "mic" as const,
+  },
+};
+
+function readableRecordingError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/AudioRecorder\.record|start failed|MediaRecorder/i.test(message)) {
+    return "無法啟動麥克風。請確認系統已允許麥克風、關閉其他正在錄音的應用程式，並在模擬器設定中啟用麥克風後再試一次。";
+  }
+  return message || "無法開始錄音，請確認麥克風未被其他應用程式使用。";
+}
+
 type VoiceCaptureOptions = {
   persistAudio?: boolean;
   onTranscript?: (text: string, audioUri?: string) => void | Promise<void>;
@@ -27,7 +50,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 }
 
 export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const audioRecorder = useAudioRecorder(VOICE_NOTE_RECORDING_PRESET);
   const recorderState = useAudioRecorderState(audioRecorder);
   const [error, setError] = useState<string | null>(null);
   const [audioUri, setAudioUri] = useState<string | undefined>();
@@ -48,10 +71,11 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
       if (!permission.granted) {
         throw new Error("尚未取得麥克風權限。請在系統設定中允許後再試一次。");
       }
+      if (Platform.OS !== "web") await new Promise((resolve) => setTimeout(resolve, 120));
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
     } catch (captureError) {
-      setError(captureError instanceof Error ? captureError.message : "無法開始錄音，請確認麥克風未被其他應用程式使用。");
+      setError(readableRecordingError(captureError));
     } finally {
       setIsPreparing(false);
     }

@@ -1,5 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
+import { noteCategories, type NoteCategory } from "../shared/note-categories";
+
+export { noteCategories, type NoteCategory } from "../shared/note-categories";
 
 export type SightGuideNote = {
   id: string;
@@ -7,7 +10,7 @@ export type SightGuideNote = {
   createdAt: string;
   audioUri?: string;
   summary?: string;
-  category?: "待辦" | "提醒" | "行程" | "資訊" | "想法" | "其他";
+  category?: NoteCategory;
   keywords?: string[];
 };
 
@@ -73,6 +76,31 @@ export async function getNotes(): Promise<SightGuideNote[]> {
 
 export async function saveNotes(notes: SightGuideNote[]) {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
+export type NoteSearchCriteria = {
+  category?: NoteCategory;
+  keyword?: string;
+};
+
+export function parseNoteSearchCommand(raw: string): NoteSearchCriteria {
+  const text = raw.trim().replace(/\s+/g, "");
+  const category = noteCategories.find((item) => text.includes(item));
+  const keyword = text
+    .replace(/^(請幫我|幫我|我要|請)?(搜尋|查找|尋找|找|查詢|篩選|顯示)/, "")
+    .replace(/(所有|分類|類別|關鍵字|標籤|的|記事|筆記|內容)/g, "")
+    .replace(category ?? "", "")
+    .trim();
+  return { category, keyword: keyword || undefined };
+}
+
+export function filterNotesByCriteria(notes: SightGuideNote[], criteria: NoteSearchCriteria) {
+  const keyword = criteria.keyword?.toLocaleLowerCase("zh-TW");
+  return notes.filter((note) => {
+    const categoryMatches = !criteria.category || note.category === criteria.category;
+    const searchable = [note.text, note.summary, ...(note.keywords ?? [])].filter(Boolean).join(" ").toLocaleLowerCase("zh-TW");
+    return categoryMatches && (!keyword || searchable.includes(keyword));
+  });
 }
 
 export function buildSavedNotesReadout(notes: SightGuideNote[]) {

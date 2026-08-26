@@ -12,7 +12,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
-import { buildSavedNotesReadout, createBrowserUrl, parseVoiceCommand } from "../lib/sightguide";
+import { buildSavedNotesReadout, createBrowserUrl, filterNotesByCriteria, parseNoteSearchCommand, parseVoiceCommand } from "../lib/sightguide";
 
 describe("視界助行語音指令", () => {
   it("辨識常見的環境、位置、時間與記事指令", () => {
@@ -51,5 +51,22 @@ describe("已儲存記事朗讀內容", () => {
 
   it("沒有記事時會提供明確語音回饋", () => {
     expect(buildSavedNotesReadout([])).toBe("目前沒有已儲存的文字記事。");
+  });
+});
+
+describe("語音搜尋與分類篩選", () => {
+  const notes = [
+    { id: "1", text: "明天早上致電醫院", createdAt: "2026-08-26T10:00:00.000Z", category: "提醒" as const, summary: "致電醫院", keywords: ["醫院"] },
+    { id: "2", text: "採買牛奶與麵包", createdAt: "2026-08-26T11:00:00.000Z", category: "待辦" as const, summary: "採買清單", keywords: ["牛奶"] },
+  ];
+
+  it("從語音命令擷取分類與關鍵字", () => {
+    expect(parseNoteSearchCommand("搜尋提醒類別的記事")).toEqual({ category: "提醒", keyword: undefined });
+    expect(parseNoteSearchCommand("搜尋關鍵字醫院")).toEqual({ category: undefined, keyword: "醫院" });
+  });
+
+  it("可依分類或關鍵字篩選記事", () => {
+    expect(filterNotesByCriteria(notes, { category: "待辦" })).toHaveLength(1);
+    expect(filterNotesByCriteria(notes, { keyword: "醫院" })[0]?.id).toBe("1");
   });
 });

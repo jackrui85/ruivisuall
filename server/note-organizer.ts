@@ -1,7 +1,7 @@
 import { invokeLLM } from "./_core/llm";
+import { noteCategories, type NoteCategory } from "../shared/note-categories.js";
 
-export const noteCategories = ["待辦", "提醒", "行程", "資訊", "想法", "其他"] as const;
-export type NoteCategory = (typeof noteCategories)[number];
+export { noteCategories, type NoteCategory } from "../shared/note-categories.js";
 
 export type NoteOrganization = {
   summary: string;
