@@ -12,7 +12,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
-import { createBrowserUrl, parseVoiceCommand } from "../lib/sightguide";
+import { buildSavedNotesReadout, createBrowserUrl, parseVoiceCommand } from "../lib/sightguide";
 
 describe("視界助行語音指令", () => {
   it("辨識常見的環境、位置、時間與記事指令", () => {
@@ -36,5 +36,20 @@ describe("安全網址建立", () => {
 
   it("把一般文字轉成經過編碼的搜尋網址", () => {
     expect(createBrowserUrl("公車 即時 動態")).toBe("https://www.google.com/search?q=%E5%85%AC%E8%BB%8A%20%E5%8D%B3%E6%99%82%20%E5%8B%95%E6%85%8B");
+  });
+});
+
+describe("已儲存記事朗讀內容", () => {
+  it("依分類、摘要與內容建立可朗讀的文字", () => {
+    const result = buildSavedNotesReadout([
+      { id: "1", text: "明天早上十點打電話給醫院", createdAt: "2026-08-26T10:00:00.000Z", category: "提醒", summary: "明早十點致電醫院" },
+    ]);
+    expect(result).toContain("共有 1 則已儲存記事");
+    expect(result).toContain("分類：提醒");
+    expect(result).toContain("摘要：明早十點致電醫院");
+  });
+
+  it("沒有記事時會提供明確語音回饋", () => {
+    expect(buildSavedNotesReadout([])).toBe("目前沒有已儲存的文字記事。");
   });
 });

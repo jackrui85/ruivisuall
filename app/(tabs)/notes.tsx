@@ -5,12 +5,14 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useVoiceCapture } from "@/hooks/use-voice-capture";
-import { getNotes, saveNotes, SightGuideNote, speakText } from "@/lib/sightguide";
+import { buildSavedNotesReadout, getNotes, saveNotes, SightGuideNote, speakText } from "@/lib/sightguide";
+import { trpc } from "@/lib/trpc";
 
 export default function NotesScreen() {
   const [notes, setNotes] = useState<SightGuideNote[]>([]);
   const [loading, setLoading] = useState(true);
   const players = useRef(new Set<ReturnType<typeof createAudioPlayer>>());
+  const organizeNote = trpc.notes.organize.useMutation();
 
   useEffect(() => {
     const activePlayers = players.current;
@@ -25,12 +27,28 @@ export default function NotesScreen() {
       return;
     }
     const note: SightGuideNote = { id: `${Date.now()}`, text: trimmed, createdAt: new Date().toISOString(), audioUri };
-    const next = [note, ...notes];
-    setNotes(next);
-    await saveNotes(next);
-    await speakText(`已儲存記事：${trimmed}`);
-  }, [notes]);
+    setNotes((current) => {
+      const next = [note, ...current];
+      void saveNotes(next);
+      return next;
+    });
+    try {
+      const organization = await organizeNote.mutateAsync({ text: trimmed });
+      setNotes((current) => {
+        const next = current.map((item) => item.id === note.id ? { ...item, ...organization } : item);
+        void saveNotes(next);
+        return next;
+      });
+      await speakText(`已儲存${organization.category}記事。摘要：${organization.summary}`);
+    } catch {
+      await speakText(`已儲存記事：${trimmed}`);
+    }
+  }, [organizeNote]);
   const voice = useVoiceCapture({ persistAudio: true, onTranscript: addTranscribedNote });
+
+  const readSavedNotes = async () => {
+    await speakText(buildSavedNotesReadout(notes));
+  };
 
   const deleteNote = async (note: SightGuideNote) => {
     const next = notes.filter((item) => item.id !== note.id);
@@ -65,6 +83,9 @@ export default function NotesScreen() {
         <Pressable accessibilityRole="button" accessibilityLabel={voice.isRecording ? "停止錄音並儲存記事" : "開始錄製語音記事"} onPress={voice.isRecording ? voice.stop : voice.start} disabled={voice.isBusy && !voice.isRecording} style={({ pressed }) => [styles.recordButton, (pressed || voice.isBusy) && styles.pressed]}>
           {voice.isProcessing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.recordText}>{voice.isRecording ? "停止錄音並儲存" : "開始錄音"}</Text>}
         </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="朗讀所有已儲存文字記事" accessibilityHint="依儲存順序朗讀最近十則記事的分類、摘要與內容" onPress={() => void readSavedNotes()} disabled={notes.length === 0} style={({ pressed }) => [styles.readAllButton, (pressed || notes.length === 0) && styles.pressed]}>
+          <Text style={styles.readAllText}>朗讀已儲存記事</Text>
+        </Pressable>
         {loading ? <ActivityIndicator color="#153D73" style={styles.loader} /> : (
           <FlatList
             data={notes}
@@ -72,8 +93,9 @@ export default function NotesScreen() {
             contentContainerStyle={styles.list}
             ListEmptyComponent={<Text style={styles.empty}>尚未有記事。請使用開始錄音建立第一則語音記事。</Text>}
             renderItem={({ item }) => (
-              <View accessible accessibilityLabel={`記事：${item.text}`} style={styles.noteCard}>
+              <View accessible accessibilityLabel={`記事，分類：${item.category || "未分類"}。${item.summary ? `摘要：${item.summary}。` : ""}內容：${item.text}`} style={styles.noteCard}>
                 <Text style={styles.noteDate}>{new Intl.DateTimeFormat("zh-TW", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(item.createdAt))}</Text>
+                <View style={styles.noteMeta}><Text style={styles.category}>{item.category || "未分類"}</Text>{item.summary ? <Text style={styles.summary}>{item.summary}</Text> : organizeNote.isPending ? <Text style={styles.organizing}>正在整理摘要…</Text> : null}</View>
                 <Text style={styles.noteText}>{item.text}</Text>
                 <View style={styles.noteActions}>
                   <Pressable accessibilityRole="button" accessibilityLabel="報讀此記事" onPress={() => void speakText(item.text)} style={styles.smallButton}><Text style={styles.smallButtonText}>報讀</Text></Pressable>
@@ -97,11 +119,17 @@ const styles = StyleSheet.create({
   statusText: { color: "#1E3A5F", fontSize: 16, lineHeight: 24, fontWeight: "600" },
   recordButton: { minHeight: 62, borderRadius: 18, backgroundColor: "#00A6A6", alignItems: "center", justifyContent: "center", marginTop: 12 },
   recordText: { color: "#FFFFFF", fontSize: 20, fontWeight: "800" },
+  readAllButton: { minHeight: 54, borderRadius: 16, backgroundColor: "#153D73", alignItems: "center", justifyContent: "center", marginTop: 10 },
+  readAllText: { color: "#FFFFFF", fontSize: 18, fontWeight: "800" },
   loader: { marginTop: 28 },
   list: { paddingTop: 16, paddingBottom: 18, gap: 12 },
   empty: { color: "#475569", textAlign: "center", fontSize: 17, lineHeight: 26, paddingTop: 26 },
   noteCard: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#D7E0EA", borderRadius: 18, padding: 16, gap: 8 },
   noteDate: { color: "#64748B", fontWeight: "700", fontSize: 14 },
+  noteMeta: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },
+  category: { color: "#0F766E", fontWeight: "800", fontSize: 15, backgroundColor: "#DDF7F4", paddingHorizontal: 9, paddingVertical: 4, borderRadius: 9 },
+  summary: { color: "#334155", flexShrink: 1, fontSize: 16, lineHeight: 23 },
+  organizing: { color: "#64748B", fontSize: 15, fontStyle: "italic" },
   noteText: { color: "#0D1B2A", fontSize: 18, lineHeight: 27, fontWeight: "600" },
   noteActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   smallButton: { minHeight: 44, paddingHorizontal: 14, borderRadius: 12, backgroundColor: "#DDEDF5", justifyContent: "center", alignItems: "center" },

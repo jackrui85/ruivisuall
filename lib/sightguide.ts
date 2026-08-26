@@ -6,6 +6,9 @@ export type SightGuideNote = {
   text: string;
   createdAt: string;
   audioUri?: string;
+  summary?: string;
+  category?: "待辦" | "提醒" | "行程" | "資訊" | "想法" | "其他";
+  keywords?: string[];
 };
 
 export type AccessibilityPreferences = {
@@ -70,6 +73,18 @@ export async function getNotes(): Promise<SightGuideNote[]> {
 
 export async function saveNotes(notes: SightGuideNote[]) {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
+export function buildSavedNotesReadout(notes: SightGuideNote[]) {
+  if (notes.length === 0) return "目前沒有已儲存的文字記事。";
+  const visibleNotes = notes.slice(0, 10);
+  const content = visibleNotes.map((note, index) => {
+    const category = note.category || "未分類";
+    const summary = note.summary ? `摘要：${note.summary}。` : "";
+    return `第 ${index + 1} 則，分類：${category}。${summary}內容：${note.text}`;
+  }).join("。 ");
+  const remainder = notes.length > visibleNotes.length ? `尚有 ${notes.length - visibleNotes.length} 則未朗讀。` : "";
+  return `共有 ${notes.length} 則已儲存記事。${content}。${remainder}`;
 }
 
 export function formatReadableTime(date = new Date()) {

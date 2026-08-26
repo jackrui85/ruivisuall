@@ -4,6 +4,7 @@ import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
+import { organizeNote } from "./note-organizer";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -89,6 +90,17 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: response.error });
         }
         return { text: response.text.trim(), language: response.language };
+      }),
+  }),
+  notes: router({
+    organize: publicProcedure
+      .input(z.object({ text: z.string().trim().min(1).max(4_000) }))
+      .mutation(async ({ input }) => {
+        try {
+          return await organizeNote(input.text);
+        } catch (error) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? `記事整理暫時無法完成：${error.message}` : "記事整理暫時無法完成。" });
+        }
       }),
   }),
 });
