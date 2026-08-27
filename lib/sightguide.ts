@@ -84,6 +84,18 @@ export function buildEnvironmentNoteText(summary: string, caution?: string) {
   return `環境辨識結果：${safeCaution ? `請注意，${safeCaution}。` : ""}${safeSummary}`;
 }
 
+export function formatRecordingDuration(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`;
+}
+
+export function nextRecordingAnnouncement(totalSeconds: number, previousAnnouncement: number, intervalSeconds = 30) {
+  const completedInterval = Math.floor(Math.max(0, totalSeconds) / intervalSeconds) * intervalSeconds;
+  return completedInterval > 0 && completedInterval > previousAnnouncement ? completedInterval : null;
+}
+
 export type NoteSearchCriteria = {
   category?: NoteCategory;
   keyword?: string;

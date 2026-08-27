@@ -105,12 +105,13 @@ export default function NotesScreen() {
         <Text style={styles.subtitle}>錄下的聲音會轉成文字並保留在這部手機；若成功儲存，也可播放原始錄音。</Text>
         <View accessible accessibilityLabel={`錄音狀態：${voice.error || (voice.isRecording ? "正在錄音" : "尚未錄音")}`} style={styles.statusCard}>
           <Text style={styles.statusText}>{voice.error || (voice.isRecording ? "正在錄音。完成後按停止並儲存。" : "按下開始錄音，說完後再按一次。")}</Text>
+          {(voice.isRecording || searchVoice?.isRecording) ? <Text accessibilityLiveRegion="polite" style={styles.durationText}>錄音時間：{voice.isRecording ? voice.recordingDurationLabel : searchVoice.recordingDurationLabel}。每 30 秒會自動語音提示一次。</Text> : null}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel={voice.isRecording ? "停止錄音並儲存記事" : "開始錄製語音記事"} onPress={voice.isRecording ? voice.stop : voice.start} disabled={(voice.isBusy || searchVoice.isBusy) && !voice.isRecording} style={({ pressed }) => [styles.recordButton, (pressed || voice.isBusy) && styles.pressed]}>
           {voice.isProcessing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.recordText}>{voice.isRecording ? "停止錄音並儲存" : "開始錄音"}</Text>}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={searchVoice.isRecording ? "停止語音搜尋記事" : "開始語音搜尋記事"} accessibilityHint="可說搜尋提醒，或搜尋關鍵字醫院" onPress={searchVoice.isRecording ? searchVoice.stop : searchVoice.start} disabled={(voice.isBusy || searchVoice.isBusy) && !searchVoice.isRecording} style={({ pressed }) => [styles.searchButton, (pressed || searchVoice.isBusy) && styles.pressed]}>
-          {searchVoice.isProcessing ? <ActivityIndicator color="#153D73" /> : <Text style={styles.searchText}>{searchVoice.isRecording ? "停止語音搜尋" : "語音搜尋記事"}</Text>}
+          {searchVoice.isProcessing ? <ActivityIndicator color="#153D73" /> : <Text style={styles.searchText}>{searchVoice.isRecording ? `停止語音搜尋（${searchVoice.recordingDurationLabel}）` : "語音搜尋記事"}</Text>}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="朗讀所有已儲存文字記事" accessibilityHint="依儲存順序朗讀最近十則記事的分類、摘要與內容" onPress={() => void readSavedNotes()} disabled={notes.length === 0} style={({ pressed }) => [styles.readAllButton, (pressed || notes.length === 0) && styles.pressed]}>
           <Text style={styles.readAllText}>朗讀已儲存記事</Text>
@@ -156,6 +157,7 @@ const styles = StyleSheet.create({
   subtitle: { color: "#475569", fontSize: 16, lineHeight: 24, marginTop: 6 },
   statusCard: { padding: 14, borderRadius: 16, backgroundColor: "#EEF6FF", marginTop: 16 },
   statusText: { color: "#1E3A5F", fontSize: 16, lineHeight: 24, fontWeight: "600" },
+  durationText: { color: "#0F5D59", fontSize: 17, lineHeight: 24, fontWeight: "800", marginTop: 8 },
   recordButton: { minHeight: 62, borderRadius: 18, backgroundColor: "#00A6A6", alignItems: "center", justifyContent: "center", marginTop: 12 },
   recordText: { color: "#FFFFFF", fontSize: 20, fontWeight: "800" },
   searchButton: { minHeight: 54, borderRadius: 16, backgroundColor: "#DDF7F4", borderWidth: 1, borderColor: "#0F766E", alignItems: "center", justifyContent: "center", marginTop: 10 },

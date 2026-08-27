@@ -12,7 +12,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
-import { buildEnvironmentNoteText, buildSavedNotesReadout, createBrowserUrl, filterNotesByCriteria, parseNoteSearchCommand, parseVoiceCommand } from "../lib/sightguide";
+import { buildEnvironmentNoteText, buildSavedNotesReadout, createBrowserUrl, filterNotesByCriteria, formatRecordingDuration, nextRecordingAnnouncement, parseNoteSearchCommand, parseVoiceCommand } from "../lib/sightguide";
 
 describe("視界助行語音指令", () => {
   it("辨識常見的環境、位置、時間與記事指令", () => {
@@ -57,6 +57,20 @@ describe("已儲存記事朗讀內容", () => {
 describe("環境辨識記事內容", () => {
   it("保留辨識摘要與需留意的提示，以便儲存為記事", () => {
     expect(buildEnvironmentNoteText("前方可見門口", "地面可能有階梯")).toBe("環境辨識結果：請注意，地面可能有階梯。前方可見門口");
+  });
+});
+
+describe("錄音長度與提示間隔", () => {
+  it("格式化秒數為可報讀的分鐘與秒數", () => {
+    expect(formatRecordingDuration(0)).toBe("0 秒");
+    expect(formatRecordingDuration(65)).toBe("1 分 5 秒");
+  });
+
+  it("只在新的 30 秒完成區間提供語音提示", () => {
+    expect(nextRecordingAnnouncement(29, 0)).toBeNull();
+    expect(nextRecordingAnnouncement(30, 0)).toBe(30);
+    expect(nextRecordingAnnouncement(31, 30)).toBeNull();
+    expect(nextRecordingAnnouncement(61, 30)).toBe(60);
   });
 });
 
