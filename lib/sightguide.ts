@@ -121,6 +121,20 @@ export function buildSavedNotesReadout(notes: SightGuideNote[]) {
   return `共有 ${notes.length} 則已儲存記事。${content}。${remainder}`;
 }
 
+export function readableRecordingError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/permission|denied|not granted|microphone|麥克風權限/i.test(message)) {
+    return "尚未取得麥克風權限。請在系統設定允許視界助行 AI 使用麥克風後再試一次。";
+  }
+  if (/already been prepared|prepareToRecordAsync|prepared/i.test(message)) {
+    return "錄音器正在準備中，請稍候再開始。若持續出現此訊息，請先返回記事頁後再試一次。";
+  }
+  if (/AudioRecorder\\.record|start failed|MediaRecorder|recording/i.test(message)) {
+    return "無法啟動麥克風。請確認系統已允許麥克風、關閉其他正在錄音的應用程式，並在裝置設定中啟用麥克風後再試一次。";
+  }
+  return message || "無法開始錄音，請確認麥克風未被其他應用程式使用。";
+}
+
 export function getEnvironmentRecognitionErrorMessage(error: unknown) {
   const rawMessage = error instanceof Error ? error.message.trim() : "";
   const normalized = rawMessage.toLowerCase();
@@ -128,8 +142,8 @@ export function getEnvironmentRecognitionErrorMessage(error: unknown) {
   if (/failed to fetch|network request failed|networkerror|load failed|fetch failed/.test(normalized)) {
     return "無法連線到環境辨識服務。請確認手機網路，重新掃描最新測試連線後再試一次。";
   }
-  if (/502|503|504|gateway|port is not open|沒有回應/.test(normalized)) {
-    return "環境辨識服務目前沒有回應。請重新啟動開發服務或重新掃描最新測試連線後再試一次。";
+  if (/502|503|504|gateway|port is not open|沒有回應|後端服務回傳無效資料|json parse|unexpected character|unexpected token/.test(normalized)) {
+    return "環境辨識服務目前沒有回應有效資料。請重新啟動開發服務或重新掃描最新測試連線後再試一次。";
   }
   if (/timeout|timed out|逾時/.test(normalized)) {
     return "環境辨識等待逾時。請將鏡頭對準主要目標，確認網路後再試一次。";
@@ -154,19 +168,21 @@ export function formatReadableTime(date = new Date()) {
 }
 
 export function parseVoiceCommand(raw: string): VoiceCommand {
-  const normalized = raw.trim().replace(/\s+/g, "").toLowerCase();
-  if (!normalized) return { type: "unknown", raw };
+  const safeRaw = typeof raw === "string" ? raw : "";
+  const normalized = safeRaw.trim().replace(/\s+/g, "").toLowerCase();
+  if (!normalized) return { type: "unknown", raw: safeRaw };
   if (/(辨識|看一下|看前方|環境|相機)/.test(normalized)) return { type: "recognize" };
   if (/(在哪裡|位置|定位|方位)/.test(normalized)) return { type: "location" };
   if (/(幾點|時間|日期)/.test(normalized)) return { type: "time" };
-  if (/(記事|筆記|記下|備忘)/.test(normalized)) return { type: "note" };
-  if (/(瀏覽器|開啟|搜尋|查詢|上網)/.test(normalized)) {
-    const query = raw
+  if (/(記事|筆記|記下|備忘|錄音|新增記事|開始錄音|開始語音記事|記一筆)/.test(normalized)) return { type: "note" };
+  if (/(瀏覽器|搜尋網站|搜尋網頁|開啟網站|查詢網頁|上網)/.test(normalized)) {
+    const query = safeRaw
       .replace(/(請幫我|幫我|我要|請|用)?(開啟|搜尋|查詢|瀏覽|上網|瀏覽器)/g, "")
+      .replace(/(網站|網頁)/g, "")
       .trim();
     return { type: "browse", query: query || undefined };
   }
-  return { type: "unknown", raw };
+  return { type: "unknown", raw: safeRaw };
 }
 
 export function createBrowserUrl(raw: string) {

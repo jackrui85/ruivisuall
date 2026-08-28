@@ -29,12 +29,18 @@ export function createTRPCClient() {
           const token = await Auth.getSessionToken();
           return token ? { Authorization: `Bearer ${token}` } : {};
         },
-        // Custom fetch to include credentials for cookie-based auth
-        fetch(url, options) {
-          return fetch(url, {
+        // Custom fetch to include credentials for cookie-based auth and reject
+        // HTML gateway/error pages before tRPC tries to parse them as JSON.
+        async fetch(url, options) {
+          const response = await fetch(url, {
             ...options,
             credentials: "include",
           });
+          const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+          if (!contentType.includes("json")) {
+            throw new Error(`後端服務回傳無效資料（HTTP ${response.status}）。`);
+          }
+          return response;
         },
       }),
     ],

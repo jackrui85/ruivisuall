@@ -9,6 +9,7 @@ import {
 import { Platform } from "react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { readableRecordingError } from "@/lib/sightguide";
 import { trpc } from "@/lib/trpc";
 
 const VOICE_NOTE_RECORDING_PRESET = {
@@ -25,17 +26,6 @@ const VOICE_NOTE_RECORDING_PRESET = {
     audioSource: "mic" as const,
   },
 };
-
-function readableRecordingError(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  if (/already been prepared|prepareToRecordAsync/i.test(message)) {
-    return "錄音器正在準備中，請稍候再開始。若持續出現此訊息，請先停止目前錄音後再試一次。";
-  }
-  if (/AudioRecorder\.record|start failed|MediaRecorder/i.test(message)) {
-    return "無法啟動麥克風。請確認系統已允許麥克風、關閉其他正在錄音的應用程式，並在模擬器設定中啟用麥克風後再試一次。";
-  }
-  return message || "無法開始錄音，請確認麥克風未被其他應用程式使用。";
-}
 
 type VoiceCaptureOptions = {
   persistAudio?: boolean;
@@ -60,23 +50,27 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
   const [isPreparing, setIsPreparing] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const startingRef = useRef(false);
+  const finalizingRef = useRef(false);
   const transcribe = trpc.voice.transcribe.useMutation();
 
   useEffect(() => {
-    if (Platform.OS !== "web") void setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+    if (Platform.OS !== "web") {
+      void setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true }).catch(() => {
+        // The start action retries audio mode setup and reports a useful error if it fails.
+      });
+    }
   }, []);
 
   useEffect(() => () => {
     try {
-      const status = audioRecorder.getStatus();
-      if (status.canRecord || status.isRecording) void audioRecorder.stop();
+      if (audioRecorder.getStatus().isRecording) void audioRecorder.stop();
     } catch {
       // The recorder may already have been released by the operating system.
     }
   }, [audioRecorder]);
 
   const start = useCallback(async () => {
-    if (startingRef.current || audioRecorder.isRecording) return;
+    if (startingRef.current || finalizingRef.current || audioRecorder.isRecording) return;
     startingRef.current = true;
     setError(null);
     setIsPreparing(true);
@@ -88,14 +82,19 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
       }
       if (Platform.OS !== "web") await new Promise((resolve) => setTimeout(resolve, 120));
       const status = audioRecorder.getStatus();
+      if (status.isRecording) return;
       if (!status.canRecord) {
         try {
           await audioRecorder.prepareToRecordAsync();
         } catch (prepareError) {
+          // Native status can lag during initialization. If preparation actually
+          // completed, continue instead of surfacing a duplicate-prepare error.
           const recoveredStatus = audioRecorder.getStatus();
           if (!recoveredStatus.canRecord) throw prepareError;
         }
       }
+      const readyStatus = audioRecorder.getStatus();
+      if (!readyStatus.canRecord) throw new Error("錄音器尚未準備完成，請稍候再試一次。");
       audioRecorder.record();
     } catch (captureError) {
       setError(readableRecordingError(captureError));
@@ -106,9 +105,14 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
   }, [audioRecorder]);
 
   const stop = useCallback(async () => {
+    if (finalizingRef.current) return;
+    finalizingRef.current = true;
     setError(null);
     setIsFinalizing(true);
     try {
+      if (!audioRecorder.getStatus().isRecording) {
+        throw new Error("目前沒有正在錄音的內容，請先按開始錄音。");
+      }
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
       if (!uri) throw new Error("找不到錄音檔案");
@@ -143,8 +147,9 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
       setAudioUri(persistedUri);
       await options.onTranscript?.(response.text, persistedUri);
     } catch (captureError) {
-      setError(captureError instanceof Error ? captureError.message : "語音轉錄失敗，請再試一次。");
+      setError(readableRecordingError(captureError));
     } finally {
+      finalizingRef.current = false;
       setIsFinalizing(false);
     }
   }, [audioRecorder, options, transcribe]);

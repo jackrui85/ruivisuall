@@ -12,7 +12,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
-import { buildEnvironmentNoteText, buildSavedNotesReadout, createBrowserUrl, filterNotesByCriteria, getEnvironmentRecognitionErrorMessage, parseNoteSearchCommand, parseVoiceCommand } from "../lib/sightguide";
+import { buildEnvironmentNoteText, buildSavedNotesReadout, createBrowserUrl, filterNotesByCriteria, getEnvironmentRecognitionErrorMessage, parseNoteSearchCommand, parseVoiceCommand, readableRecordingError } from "../lib/sightguide";
 
 describe("視界助行語音指令", () => {
   it("辨識常見的環境、位置、時間與記事指令", () => {
@@ -23,8 +23,19 @@ describe("視界助行語音指令", () => {
   });
 
   it("把瀏覽器語音轉為含搜尋字詞的命令", () => {
-    expect(parseVoiceCommand("搜尋公車即時動態")).toEqual({ type: "browse", query: "公車即時動態" });
-    expect(parseVoiceCommand("開啟台灣銀行")).toEqual({ type: "browse", query: "台灣銀行" });
+    expect(parseVoiceCommand("搜尋網站公車即時動態")).toEqual({ type: "browse", query: "公車即時動態" });
+    expect(parseVoiceCommand("開啟網站台灣銀行")).toEqual({ type: "browse", query: "台灣銀行" });
+  });
+
+  it("支援記事同義詞並安全處理空白或非字串轉錄結果", () => {
+    expect(parseVoiceCommand("開始語音記事")).toEqual({ type: "note" });
+    expect(parseVoiceCommand("開始錄音")).toEqual({ type: "note" });
+    expect(parseVoiceCommand("   ")).toEqual({ type: "unknown", raw: "   " });
+    expect(parseVoiceCommand(undefined as unknown as string)).toEqual({ type: "unknown", raw: "" });
+  });
+
+  it("不把搜尋記事誤送到瀏覽器", () => {
+    expect(parseVoiceCommand("搜尋提醒類別的記事")).toEqual({ type: "note" });
   });
 });
 
@@ -58,11 +69,23 @@ describe("環境辨識錯誤回饋", () => {
   it("把網路錯誤轉成可理解的重試提示", () => {
     expect(getEnvironmentRecognitionErrorMessage(new Error("Failed to fetch"))).toContain("無法連線到環境辨識服務");
     expect(getEnvironmentRecognitionErrorMessage(new Error("HTTP 502 gateway"))).toContain("目前沒有回應");
+    expect(getEnvironmentRecognitionErrorMessage(new Error("JSON Parse error: Unexpected character: <"))).toContain("沒有回應有效資料");
   });
 
   it("保留後端已轉換的辨識錯誤並為未知錯誤提供預設訊息", () => {
     expect(getEnvironmentRecognitionErrorMessage(new Error("影像辨識暫時無法完成：AI 服務忙碌中"))).toContain("AI 服務忙碌中");
     expect(getEnvironmentRecognitionErrorMessage({})).toBe("影像辨識暫時無法完成，請重新拍攝後再試一次。");
+  });
+});
+
+describe("錄音錯誤回饋", () => {
+  it("把權限與原生錄音錯誤轉成明確提示", () => {
+    expect(readableRecordingError(new Error("microphone permission denied"))).toContain("麥克風權限");
+    expect(readableRecordingError(new Error("AudioRecorder.record start failed"))).toContain("無法啟動麥克風");
+  });
+
+  it("未知錯誤也會提供可操作的預設訊息", () => {
+    expect(readableRecordingError({})).toContain("無法開始錄音");
   });
 });
 
