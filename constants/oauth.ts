@@ -1,4 +1,5 @@
 import * as Linking from "expo-linking";
+import Constants from "expo-constants";
 import * as ReactNative from "react-native";
 
 // Extract scheme from bundle ID (last segment timestamp, prefixed with "manus")
@@ -30,22 +31,22 @@ export const API_BASE_URL = env.apiBaseUrl;
  * URL pattern: https://PORT-sandboxid.region.domain
  */
 export function getApiBaseUrl(): string {
-  // If API_BASE_URL is set, use it
-  if (API_BASE_URL) {
-    return API_BASE_URL.replace(/\/$/, "");
-  }
-
-  // On web, derive from current hostname by replacing port 8081 with 3000
+  // Web previews can move to a new sandbox hostname after a restart. Prefer the
+  // current 8081 host so a stale build-time URL cannot cause Failed to fetch.
   if (ReactNative.Platform.OS === "web" && typeof window !== "undefined" && window.location) {
     const { protocol, hostname } = window.location;
-    // Pattern: 8081-sandboxid.region.domain -> 3000-sandboxid.region.domain
     const apiHostname = hostname.replace(/^8081-/, "3000-");
     if (apiHostname !== hostname) {
       return `${protocol}//${apiHostname}`;
     }
   }
 
-  // Fallback to empty (will use relative URL)
+  const extraApiBaseUrl = Constants.expoConfig?.extra?.apiBaseUrl;
+  const configuredApiBaseUrl = API_BASE_URL || (typeof extraApiBaseUrl === "string" ? extraApiBaseUrl : "");
+  if (configuredApiBaseUrl) return configuredApiBaseUrl.replace(/\/$/, "");
+
+  // A native build without an injected API URL cannot make a relative request.
+  // The caller will turn the resulting network error into a spoken recovery hint.
   return "";
 }
 

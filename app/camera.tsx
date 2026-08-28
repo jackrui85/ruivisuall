@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { buildEnvironmentNoteText, getNotes, saveNotes, SightGuideNote, speakText, stopSpeaking } from "@/lib/sightguide";
+import { buildEnvironmentNoteText, getEnvironmentRecognitionErrorMessage, getNotes, saveNotes, SightGuideNote, speakText, stopSpeaking } from "@/lib/sightguide";
 import { trpc } from "@/lib/trpc";
 
 export default function CameraScreen() {
@@ -61,7 +61,7 @@ export default function CameraScreen() {
         await speakText(spoken);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "影像辨識暫時無法完成。";
+      const message = getEnvironmentRecognitionErrorMessage(error);
       setResult(message);
       if (!live) await speakText(message);
     } finally {

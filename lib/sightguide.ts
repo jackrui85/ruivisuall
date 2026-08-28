@@ -84,18 +84,6 @@ export function buildEnvironmentNoteText(summary: string, caution?: string) {
   return `環境辨識結果：${safeCaution ? `請注意，${safeCaution}。` : ""}${safeSummary}`;
 }
 
-export function formatRecordingDuration(totalSeconds: number) {
-  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor(safeSeconds / 60);
-  const seconds = safeSeconds % 60;
-  return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`;
-}
-
-export function nextRecordingAnnouncement(totalSeconds: number, previousAnnouncement: number, intervalSeconds = 30) {
-  const completedInterval = Math.floor(Math.max(0, totalSeconds) / intervalSeconds) * intervalSeconds;
-  return completedInterval > 0 && completedInterval > previousAnnouncement ? completedInterval : null;
-}
-
 export type NoteSearchCriteria = {
   category?: NoteCategory;
   keyword?: string;
@@ -131,6 +119,23 @@ export function buildSavedNotesReadout(notes: SightGuideNote[]) {
   }).join("。 ");
   const remainder = notes.length > visibleNotes.length ? `尚有 ${notes.length - visibleNotes.length} 則未朗讀。` : "";
   return `共有 ${notes.length} 則已儲存記事。${content}。${remainder}`;
+}
+
+export function getEnvironmentRecognitionErrorMessage(error: unknown) {
+  const rawMessage = error instanceof Error ? error.message.trim() : "";
+  const normalized = rawMessage.toLowerCase();
+
+  if (/failed to fetch|network request failed|networkerror|load failed|fetch failed/.test(normalized)) {
+    return "無法連線到環境辨識服務。請確認手機網路，重新掃描最新測試連線後再試一次。";
+  }
+  if (/502|503|504|gateway|port is not open|沒有回應/.test(normalized)) {
+    return "環境辨識服務目前沒有回應。請重新啟動開發服務或重新掃描最新測試連線後再試一次。";
+  }
+  if (/timeout|timed out|逾時/.test(normalized)) {
+    return "環境辨識等待逾時。請將鏡頭對準主要目標，確認網路後再試一次。";
+  }
+  if (rawMessage.includes("影像辨識暫時無法完成")) return rawMessage;
+  return rawMessage || "影像辨識暫時無法完成，請重新拍攝後再試一次。";
 }
 
 export function formatReadableTime(date = new Date()) {

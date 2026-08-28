@@ -9,7 +9,6 @@ import {
 import { Platform } from "react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { formatRecordingDuration, nextRecordingAnnouncement, speakText } from "@/lib/sightguide";
 import { trpc } from "@/lib/trpc";
 
 const VOICE_NOTE_RECORDING_PRESET = {
@@ -27,11 +26,6 @@ const VOICE_NOTE_RECORDING_PRESET = {
   },
 };
 
-type VoiceCaptureOptions = {
-  persistAudio?: boolean;
-  onTranscript?: (text: string, audioUri?: string) => void | Promise<void>;
-};
-
 function readableRecordingError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (/already been prepared|prepareToRecordAsync/i.test(message)) {
@@ -42,6 +36,11 @@ function readableRecordingError(error: unknown) {
   }
   return message || "無法開始錄音，請確認麥克風未被其他應用程式使用。";
 }
+
+type VoiceCaptureOptions = {
+  persistAudio?: boolean;
+  onTranscript?: (text: string, audioUri?: string) => void | Promise<void>;
+};
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
@@ -55,15 +54,13 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 
 export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
   const audioRecorder = useAudioRecorder(VOICE_NOTE_RECORDING_PRESET);
-  const recorderState = useAudioRecorderState(audioRecorder, 250);
+  const recorderState = useAudioRecorderState(audioRecorder);
   const [error, setError] = useState<string | null>(null);
   const [audioUri, setAudioUri] = useState<string | undefined>();
   const [isPreparing, setIsPreparing] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const startingRef = useRef(false);
-  const lastLengthAnnouncementRef = useRef(0);
   const transcribe = trpc.voice.transcribe.useMutation();
-  const recordingSeconds = Math.floor(Math.max(0, recorderState.durationMillis) / 1000);
 
   useEffect(() => {
     if (Platform.OS !== "web") void setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
@@ -77,17 +74,6 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
       // The recorder may already have been released by the operating system.
     }
   }, [audioRecorder]);
-
-  useEffect(() => {
-    if (!recorderState.isRecording) {
-      lastLengthAnnouncementRef.current = 0;
-      return;
-    }
-    const dueAt = nextRecordingAnnouncement(recordingSeconds, lastLengthAnnouncementRef.current);
-    if (dueAt === null) return;
-    lastLengthAnnouncementRef.current = dueAt;
-    void speakText(`已錄音 ${formatRecordingDuration(dueAt)}。`);
-  }, [recorderState.isRecording, recordingSeconds]);
 
   const start = useCallback(async () => {
     if (startingRef.current || audioRecorder.isRecording) return;
@@ -141,12 +127,19 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
       }
       const info = await FileSystem.getInfoAsync(uri);
       if (!info.exists) throw new Error("找不到錄音檔案");
-      if ((info.size ?? 0) > 16 * 1024 * 1024) throw new Error("錄音檔過大，請將記事內容縮短後再試一次。");
+      if ((info.size ?? 0) > 16 * 1024 * 1024) {
+        throw new Error("錄音檔過大，請將記事內容縮短後再試一次。");
+      }
       const documents = FileSystem.documentDirectory;
-      const persistedUri = options.persistAudio && documents ? `${documents}sightguide-note-${Date.now()}.m4a` : undefined;
+      const persistedUri = options.persistAudio && documents
+        ? `${documents}sightguide-note-${Date.now()}.m4a`
+        : undefined;
       if (persistedUri) await FileSystem.copyAsync({ from: uri, to: persistedUri });
       const audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      const response = await transcribe.mutateAsync({ audioBase64, mimeType: "audio/mp4" });
+      const response = await transcribe.mutateAsync({
+        audioBase64,
+        mimeType: "audio/mp4",
+      });
       setAudioUri(persistedUri);
       await options.onTranscript?.(response.text, persistedUri);
     } catch (captureError) {
@@ -162,8 +155,6 @@ export function useVoiceCapture(options: VoiceCaptureOptions = {}) {
     isBusy: isPreparing || isFinalizing || transcribe.isPending,
     isProcessing: isFinalizing || transcribe.isPending,
     isRecording: recorderState.isRecording,
-    recordingSeconds,
-    recordingDurationLabel: formatRecordingDuration(recordingSeconds),
     start,
     stop,
   };
